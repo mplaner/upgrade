@@ -1,0 +1,536 @@
+// Package:    Ntuplizer
+// Class:      Ntuplizer
+// 
+/**\class Ntuplizer Ntuplizer.cc Ntuple/Ntuplizer/src/Ntuplizer.cc
+
+ Description: [one line class summary]
+
+ Implementation:
+     [Notes on implementation]
+*/
+//
+// Original Author:  Michael David Planer
+//         Created:  Fri Jul 19 03:51:27 EDT 2013
+// $Id$
+//
+//
+
+
+// system include files
+#include <memory>
+
+//for conversion vertex truth
+#include "RecoEgamma/EgammaMCTools/interface/ElectronMCTruth.h"
+#include "RecoEgamma/EgammaMCTools/interface/PhotonMCTruth.h"
+#include "RecoEgamma/EgammaMCTools/interface/PhotonMCTruthFinder.h"
+
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingParticle.h"
+#include "SimDataFormats/TrackingAnalysis/interface/TrackingVertexContainer.h"
+#include "DataFormats/JetReco/interface/GenJet.h"
+
+
+// user include files
+#include "FWCore/Framework/interface/Frameworkfwd.h"
+#include "FWCore/Framework/interface/EDAnalyzer.h"
+#include "FWCore/Framework/interface/EDProducer.h"
+#include "FWCore/Utilities/interface/InputTag.h"
+#include "FWCore/Framework/interface/Event.h"
+#include "FWCore/Framework/interface/EventSetup.h"
+#include "FWCore/Framework/interface/MakerMacros.h"
+#include "DataFormats/Common/interface/Handle.h"
+#include "FWCore/ParameterSet/interface/ParameterSet.h"
+#include "DataFormats/VertexReco/interface/Vertex.h"
+#include "DataFormats/PatCandidates/interface/Photon.h"
+#include "DataFormats/PatCandidates/interface/PackedGenParticle.h"
+#include "DataFormats/EgammaCandidates/interface/GsfElectron.h"
+#include "DataFormats/EcalDigi/interface/EcalDigiCollections.h"
+#include "Geometry/CaloTopology/interface/CaloTopology.h"
+#include "Geometry/CaloEventSetup/interface/CaloTopologyRecord.h"
+#include "Geometry/CaloGeometry/interface/CaloGeometry.h"
+
+#include "CondFormats/EcalObjects/interface/EcalIntercalibConstantsMC.h"
+#include "CondFormats/EcalObjects/interface/EcalIntercalibConstants.h"
+#include "CondFormats/DataRecord/interface/EcalIntercalibConstantsMCRcd.h"
+#include "CondFormats/DataRecord/interface/EcalIntercalibConstantsRcd.h"
+#include "CondFormats/DataRecord/interface/EcalTimeCalibConstantsRcd.h"
+#include "CondFormats/DataRecord/interface/EcalADCToGeVConstantRcd.h"
+#include "CondFormats/DataRecord/interface/EcalTimeOffsetConstantRcd.h"
+#include "CondFormats/DataRecord/interface/EcalChannelStatusRcd.h"
+#include "CondFormats/EcalObjects/interface/EcalTimeCalibConstants.h"
+#include "RecoLocalCalo/EcalRecProducers/plugins/EcalRecHitWorkerSimple.h"
+#include "CalibCalorimetry/EcalLaserCorrection/interface/EcalLaserDbService.h"
+#include "CalibCalorimetry/EcalLaserCorrection/interface/EcalLaserDbRecord.h"
+#include "RecoLocalCalo/EcalRecAlgos/interface/EcalSeverityLevelAlgo.h"
+
+#include "RecoEcal/EgammaCoreTools/interface/EcalClusterLazyTools.h"
+
+#include "DataFormats/VertexReco/interface/Vertex.h"
+#include "DataFormats/VertexReco/interface/VertexFwd.h"
+#include "DataFormats/TrackReco/interface/Track.h"
+#include "DataFormats/GsfTrackReco/interface/GsfTrack.h"
+#include "SimDataFormats/PileupSummaryInfo/interface/PileupSummaryInfo.h"
+#include "DataFormats/EcalDetId/interface/EBDetId.h"
+#include "DataFormats/EcalDetId/interface/EEDetId.h"
+#include "DataFormats/EgammaCandidates/interface/Photon.h"
+#include "DataFormats/EgammaCandidates/interface/PhotonFwd.h"
+#include "DataFormats/HepMCCandidate/interface/GenParticle.h"
+#include "DataFormats/ParticleFlowCandidate/interface/PFCandidate.h"
+#include "DataFormats/ParticleFlowCandidate/interface/PFCandidateFwd.h"
+#include "DataFormats/EcalRecHit/interface/EcalRecHitCollections.h"
+
+#include "FWCore/ParameterSet/interface/ParameterSet.h"
+#include "FWCore/MessageLogger/interface/MessageLogger.h"
+#include "FWCore/ServiceRegistry/interface/Service.h"
+#include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include "CommonTools/Utils/interface/StringToEnumValue.h"
+
+#include <stdint.h>
+#include "TTree.h"
+#include "TBranch.h"
+
+using namespace std;
+using namespace edm;
+
+#define MAX_ELECTRON 1000
+#define MAX_PHOTON 1000
+#define MAX_GEN 1000
+//
+// class declaration
+//
+
+class Ntuplizer : public edm::EDAnalyzer {
+public:
+  explicit Ntuplizer(const edm::ParameterSet&);
+  ~Ntuplizer();
+  
+  static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
+  
+private:
+  virtual void beginJob(const edm::EventSetup&, const edm::ParameterSet&) ;
+  virtual void analyze(const edm::Event&, const edm::EventSetup&);
+  virtual void endJob() ;
+
+  edm::EDGetTokenT<View<pat::Photon> > photonToken_;
+  edm::EDGetTokenT<View<pat::PackedGenParticle> > genToken_;
+  edm::EDGetTokenT<View<reco::Vertex> > vertexToken_;
+  /*********for conv truth***********/
+
+  //  edm::InputTag  g4_simTk_Token_;
+  //edm::InputTag g4_simVtx_Token_;
+
+/*********end conv truth***********/  
+
+  edm::Service<TFileService> fs;
+
+  TTree *t_photon;
+
+
+  //photon branches
+  TBranch *b_p_r9;
+  TBranch *b_p_ecal_energy;
+  TBranch *b_p_photon_energy;
+  TBranch *b_p_eta;
+  TBranch *b_p_phi;
+  TBranch *b_p_SCeta;
+  TBranch *b_p_SCphi;
+  TBranch *b_p_energy_1x5;
+  TBranch *b_p_energy_2x5;
+  TBranch *b_p_energy_3x3;
+  TBranch *b_p_energy_5x5;
+  TBranch *b_p_raw_energy;
+  TBranch *b_p_es_energy;
+  TBranch *b_p_pt;
+  TBranch *b_p_size;
+  TBranch *b_p_isGap;
+  TBranch *b_p_sigmaIetaIeta;
+  TBranch *b_p_hOverE;
+  TBranch *b_p_ecalRecHitSumEtConeDR03;
+  TBranch *b_p_hcalTowerSumEtConeDR03;
+  TBranch *b_p_trkSumPtSolidConeDR03;
+  
+  
+  float p_photonenergy[MAX_PHOTON];
+  double p_esenergy[MAX_PHOTON];
+  double p_rawenergy[MAX_PHOTON];
+  float p_ecalenergy[MAX_PHOTON];
+  float p_energy_1x5[MAX_PHOTON];
+  float p_energy_2x5[MAX_PHOTON];
+  float p_energy_3x3[MAX_PHOTON];
+  float p_energy_5x5[MAX_PHOTON];
+  float p_pt[MAX_PHOTON];
+  float p_r9[MAX_PHOTON];
+  bool p_isGap[MAX_PHOTON];
+  float p_sigmaIetaIeta[MAX_PHOTON];
+  float p_hOverE[MAX_PHOTON];
+  float p_ecalRecHitSumEtConeDR03[MAX_PHOTON];
+  float p_hcalTowerSumEtConeDR03[MAX_PHOTON];
+  float p_trkSumPtSolidConeDR03[MAX_PHOTON];
+  
+  double p_eta[MAX_PHOTON];
+  double p_phi[MAX_PHOTON];
+  double p_SCeta[MAX_PHOTON];
+  double p_SCphi[MAX_PHOTON];
+  int    p_size;
+
+
+
+  //generator level branches
+  TBranch *b_g_isConv;
+  TBranch *b_g_status;
+  TBranch *b_g_ePt;
+  TBranch *b_g_pPt;  
+  TBranch* b_g_hdaughter;
+  TBranch* b_g_zdaughter;
+  TBranch* b_g_pt;
+  TBranch* b_g_eta;
+  TBranch *b_g_phi;
+  TBranch *b_g_pdgid;
+  TBranch *b_g_size;
+  TBranch *b_g_run;
+  TBranch *b_g_lumi;
+  TBranch *b_g_event;
+  
+  //pileup branches
+  TBranch *b_pu_size;
+  TBranch *b_pu_bx;
+  TBranch *b_vtx_size;
+  
+  int    g_pdgid[MAX_GEN];
+  int    g_isConv[MAX_GEN];
+  int    g_status[MAX_GEN];
+  float  g_pPt[MAX_GEN];
+  float  g_ePt[MAX_GEN];
+  bool   g_hdaughter[MAX_GEN];
+  bool   g_zdaughter[MAX_GEN];
+  float  g_pt[MAX_GEN];
+  double g_eta[MAX_GEN];
+  double g_phi[MAX_GEN];
+  int    g_size;
+  
+  int    pu_size[16]; //number of vertices per bx
+  int    pu_bx[16];   //bx index
+  int    vtx_size;
+  
+  int n_event;
+  int n_lumi;
+  int n_run;
+
+};
+
+Ntuplizer::Ntuplizer(const edm::ParameterSet& iConfig):
+  photonToken_( consumes<View<pat::Photon> >( iConfig.getParameter<edm::InputTag> ( "photonTag" ) ) ),
+  genToken_( consumes<View<pat::PackedGenParticle> >( iConfig.getParameter<edm::InputTag>( "genTag" ) ) ),
+  vertexToken_( consumes<View<reco::Vertex> >( iConfig.getParameter<edm::InputTag> ( "vertexTag" ) ) )
+{
+  t_photon = fs->make<TTree>("photon","photon");
+  
+  /*********branch initialization for pileup******/
+  b_pu_size          = t_photon->Branch("pusize",pu_size, "pusize[16]/I");
+  b_pu_bx            = t_photon->Branch("puBx",pu_bx,"puBx[16]/I");
+  b_vtx_size            = t_photon->Branch("vtxsize",&vtx_size,"vtxsize/I");
+  
+/*****branch initialization for photons****/
+  b_p_size          = t_photon->Branch("psize",&p_size, "psize/I");
+  b_p_photon_energy   = t_photon->Branch("pPhoton_energy", p_photonenergy,"pPhoton_energy[psize]/F");
+  b_p_ecal_energy   = t_photon->Branch("pSC_energy", p_ecalenergy,"pSC_energy[psize]/F");
+  b_p_eta           = t_photon->Branch("pEta",p_eta,"pEta[psize]/D");
+  b_p_phi           = t_photon->Branch("pPhi",p_phi,"pPhi[psize]/D");
+  b_p_SCeta           = t_photon->Branch("pSCeta",p_SCeta,"pSCeta[psize]/D");
+  b_p_SCphi           = t_photon->Branch("pSCphi",p_SCphi,"pSCphi[psize]/D");
+  b_p_es_energy     = t_photon->Branch("pEsenergy", p_esenergy, "pEsenergy[psize]/D");
+  b_p_raw_energy    = t_photon->Branch("pRawenergy",p_rawenergy,"pRawenergy[psize]/D");
+  b_p_pt            = t_photon->Branch("pPt"       ,p_pt,       "pPt[psize]/F");
+  b_p_energy_1x5    = t_photon->Branch("p1x5_energy",p_energy_1x5,"p1x5_energy[psize]/F");
+  b_p_energy_2x5    = t_photon->Branch("p2x5_energy",p_energy_2x5,"p2x5_energy[psize]/F");
+  b_p_energy_3x3    = t_photon->Branch("p3x3_energy",p_energy_3x3,"p3x3_energy[psize]/F");
+  b_p_energy_5x5    = t_photon->Branch("p5x5_energy",p_energy_5x5,"p5x5_energy[psize]/F");
+  b_p_r9            = t_photon->Branch("pR9",p_r9,"pR9[psize]/F");
+  b_p_isGap         = t_photon->Branch("pGap",p_isGap,"pGap[psize]/O");
+  b_p_sigmaIetaIeta = t_photon->Branch("pSigmaIetaIeta",p_sigmaIetaIeta,"pSigmaIetaIeta[psize]/F");
+  b_p_hOverE        =   t_photon->Branch("pHoverE",p_hOverE,"pHoverE[psize]/F");
+  b_p_ecalRecHitSumEtConeDR03 = t_photon->Branch("p_ecalRecHitSumEtConeDR03",p_ecalRecHitSumEtConeDR03,"p_ecalRecHitSumEtConeDR03[psize]/F");
+  b_p_hcalTowerSumEtConeDR03  = t_photon->Branch("p_hcalTowerSumEtConeDR03" ,p_hcalTowerSumEtConeDR03 ,"p_hcalTowerSumEtConeDR03[psize]/F");
+  b_p_trkSumPtSolidConeDR03=t_photon->Branch("p_trkSumPtSolidConeDR03",p_trkSumPtSolidConeDR03,"p_trkSumPtSolidConeDR03[psize]/F");
+  
+  /*****branch initialization for gen particles ****/  
+  b_g_size =       t_photon->Branch("gsize",&g_size,"gsize/I");
+  b_g_pt =         t_photon->Branch("gPt", g_pt,"gPt[gsize]/F");
+  b_g_isConv         = t_photon->Branch("gConv",g_isConv,"gConv[gsize]/I");
+  b_g_status         = t_photon->Branch("gStatus",g_status,"gStatus[gsize]/I");
+  b_g_ePt         = t_photon->Branch("gePt",g_ePt,"gePt[gsize]/F");
+  b_g_pPt         = t_photon->Branch("gpPt",g_pPt,"gpPt[gsize]/F");
+  b_g_hdaughter =  t_photon->Branch("gHdaughter", g_hdaughter,"gHdaughter[gsize]/O");
+  b_g_zdaughter =  t_photon->Branch("gZdaughter", g_zdaughter,"gZdaughter[gsize]/O");
+  b_g_eta =        t_photon->Branch("gEta",g_eta,"gEta[gsize]/D");
+  b_g_phi =        t_photon->Branch("gPhi",g_phi,"gPhi[gsize]/D");  
+  b_g_pdgid =      t_photon->Branch("pdgid",g_pdgid,"pdgid[gsize]/I");
+  b_g_run =        t_photon->Branch("run_number",&n_run,"run_number/I");
+  b_g_lumi =       t_photon->Branch("lumi_number",&n_lumi,"lumi_number/I");
+  b_g_event =      t_photon->Branch("event_number",&n_event,"event_number/I");
+}
+
+
+Ntuplizer::~Ntuplizer()
+{
+}
+
+void
+Ntuplizer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
+{
+   using namespace edm;
+
+      /*********for conv truth***********/
+   //   std::cout << "in ntuplizer " << std::endl;
+   /*
+   edm::Handle<std::vector<SimTrack>> simTrack;
+   if(!iEvent.getByToken("g4SimHits",simTrack))
+     {
+       std::cout << "simTracks not found" << std::endl;
+       return;
+     }
+
+   edm::Handle<std::vector<SimVertex>> simVertex;
+   if(!iEvent.getByToken("g4SimHits",simVertex))
+     {
+       std::cout << "simVertices not found" << std::endl;
+       return;
+     }
+   
+   std::vector<SimTrack> theSimTracks;
+   std::vector<SimVertex> theSimVertices;
+   theSimTracks.insert(theSimTracks.end(),simTrack->begin(),simTrack->end());
+   theSimVertices.insert(theSimVertices.end(),simVertex->begin(),simVertex->end());
+   
+   PhotonMCTruthFinder*  thePhotonMCTruthFinder_;
+   thePhotonMCTruthFinder_ = new PhotonMCTruthFinder();
+   std::vector<PhotonMCTruth> mcPhotons=thePhotonMCTruthFinder_->find(theSimTracks,  theSimVertices);
+   
+   */
+   /*********end conv truth***********/
+
+
+
+   
+   //   edm::Handle<std::vector<PileupSummaryInfo>> PupInfo;
+   //if(!iEvent.getByToken("addPileupInfo",PupInfo))
+   // {
+   //   std::cout << "Pileup Summary not found" << std::endl;
+   //   return;
+   // }
+   Handle<View<reco::Vertex>> recoVertices;
+   iEvent.getByToken(vertexToken_,recoVertices);
+   Handle<View<pat::Photon>> photons;
+   iEvent.getByToken(photonToken_ ,photons);
+   Handle<View<pat::PackedGenParticle>> genCollection;
+   iEvent.getByToken(genToken_ ,genCollection);
+   std::cout.flush();   
+      
+     /*************start Pileup**************************************************/
+   std::vector<PileupSummaryInfo>::const_iterator PVI;
+   for(int i=0;i< 16; i++)
+     {
+       pu_size[i] =  0;
+       pu_bx[i]   = -1;
+     }
+   /*
+   int nPU=0; //used to assign index for pileup events
+   for(PVI = PupInfo->begin(); PVI != PupInfo->end(); ++PVI) //should be 16 pileup bxs per event
+     {
+       pu_size[nPU]=PVI->getPU_NumInteractions();
+       pu_bx[nPU] = PVI->getBunchCrossing();   
+       //std::cout << "nPU " << nPU << " pu size " << pu_size[nPU] << std::endl;
+       nPU++;
+     }
+   */
+   //std::cout << nPU << " PU bx per event" << std::endl;
+   
+   
+   n_event = iEvent.id().event();
+   n_run   = iEvent.id().run();
+   n_lumi  = iEvent.id().luminosityBlock();
+
+   /***************************start photons *********************************************/
+   for(int i=0;i<MAX_PHOTON;i++)
+     {
+       p_ecalenergy[i]=-100;
+       p_photonenergy[i]=-100;
+       p_eta[i]=-100;
+       p_phi[i]=-100;
+       p_SCeta[i]=-100;
+       p_SCphi[i]=-100;
+       p_r9[i]=-100;
+       p_energy_1x5[i]=-100;
+       p_energy_2x5[i]=-100;
+       p_energy_3x3[i]=-100;
+       p_energy_5x5[i]=-100;
+       p_esenergy[i]=-100;
+       p_rawenergy[i]=-100;
+       p_pt[i]=-100;
+       p_isGap[i]=0;
+       p_hOverE[i]=-100;
+       p_sigmaIetaIeta[i]=-100;
+       p_ecalRecHitSumEtConeDR03[i]=-100;
+       p_hcalTowerSumEtConeDR03[i]= -100;
+       p_trkSumPtSolidConeDR03[i]= -100;
+
+       g_eta[i]=-100;
+       g_phi[i]=-100;
+       g_pt[i]=-100;
+       g_status[i] = -1;
+       g_ePt[i]= 0;
+       g_pPt[i]= 0;
+       g_pdgid[i]=0;
+       g_isConv[i]=-1;
+       g_hdaughter[i]=0;
+       g_zdaughter[i]=0;
+     }
+   p_size=0;
+   g_size=0;
+   //std::cout << "start gen collection" << std::endl;
+   //   for(reco::GenParticleCollection::const_iterator gen_it=genCollection->begin(); gen_it!=genCollection->end() ; ++gen_it)
+   for(unsigned int i=0; i<genCollection->size() ; i++)
+     {
+       Ptr<pat::PackedGenParticle> gen_it= genCollection->ptrAt( i );
+       //       std::cout << "in gen particle collection" << std::endl;
+       if(gen_it->pdgId()!=22) //check for photons
+	 continue;
+       //std::cout << "pt : " << gen_it->pt() << std::endl;
+       if(gen_it->pt()<15)
+	 continue;
+       if(g_size>999)
+	 break;
+       if(gen_it->status()!=1)
+	 continue;
+       //if(gen_it->mother()->pdgId()!=25) //packed doesn't store mother pdgid.  Need to check status instead.
+       //continue;
+       //std::cout << (int) (genCollection->end() - gen_it) << std::endl;
+       //std::cout << "mother: " << gen_it->mother()->pdgId() << std::endl;
+       g_hdaughter[g_size]=1;
+       g_eta[g_size] = gen_it->eta();
+       g_phi[g_size] = gen_it->phi();
+       g_pt[g_size] =  gen_it->pt();
+       g_pdgid[g_size] = 22;
+       g_status[g_size] = gen_it->status();
+       //       std::cout << "status " << g_status[g_size] << std::endl;  
+       /******start conversion**********/
+       /*
+       for(std::vector<PhotonMCTruth>::const_iterator it=mcPhotons.begin(); it!=mcPhotons.end() ; ++it)         {                                                                                                                           
+       //std::cout << it - mcPhotons.begin() << std::endl;                                                                       
+           if(fabs(gen_it->eta()-(*it).fourMomentum().pseudoRapidity())<.001)                                                        
+             {                                                                                                                       
+	     //std::cout << " geneta: "  << gen_it->eta() << " truth eta: " << (*it).fourMomentum().pseudoRapidity() << std::endl;
+               if(fabs(gen_it->phi()-(*it).fourMomentum().phi())<.001)                                                               
+                 {                                                                                                                   
+		 //      std::cout << " genphi: "  << gen_it->phi() << " truth phi: " << (*it).fourMomentum().phi() << std::endl; 
+                   if(fabs(gen_it->pt()-(*it).fourMomentum().et())<.001)                                                             
+                     {                                                                                                               
+		     //  std::cout << " geneta: "  << gen_it->pt() << " truth eta: " << (*it).fourMomentum().et() << std::endl;    
+                       g_isConv[g_size] = 0;                                                                                         
+                       if(fabs(g_eta[g_size])<1.566)  //check for conversion in front of barrel                                      
+                         if((*it).vertex().perp()<80)                                                                                
+                           if((*it).isAConversion())                                                                                 
+                             g_isConv[g_size] = 1;                                                                                   
+                       if( fabs( g_eta[g_size] )>1.566 ) //check for conversion in front of endcap                                   
+                         if( fabs( (*it).vertex().z() )<210 )                                                                        
+                           if( (*it).isAConversion() )                                                                               
+                             g_isConv[g_size] =1;                                                                                    
+			     // std::cout << "g_isConv : " << g_isConv[g_size] << std::endl;                                               
+                     }                                                                                                               
+                 }                                                                                                                   
+             }                                                                                                                       
+         }                                     
+	 {
+	   //std::cout << it - mcPhotons.begin() << std::endl; 
+	   if(fabs(gen_it->eta()-(*it).fourMomentum().pseudoRapidity())<.001)
+	     {
+	       //std::cout << " geneta: "  << gen_it->eta() << " truth eta: " << (*it).fourMomentum().pseudoRapidity() << std::endl;
+	       if(fabs(gen_it->phi()-(*it).fourMomentum().phi())<.001)
+		 {
+		   //      std::cout << " genphi: "  << gen_it->phi() << " truth phi: " << (*it).fourMomentum().phi() << std::endl; 
+		   if(fabs(gen_it->pt()-(*it).fourMomentum().et())<.001)
+		     {
+		       //  std::cout << " geneta: "  << gen_it->pt() << " truth eta: " << (*it).fourMomentum().et() << std::endl;  
+		       g_isConv[g_size] = 0;
+		       if(fabs(g_eta[g_size])<1.566)  //check for conversion in front of barrel 
+			 if((*it).vertex().perp()<80)
+			   if((*it).isAConversion())
+			     g_isConv[g_size] = 1;
+		       if( fabs( g_eta[g_size] )>1.566 ) //check for conversion in front of endcap  
+			 if( fabs( (*it).vertex().z() )<210 )
+			   if( (*it).isAConversion() )
+			     g_isConv[g_size] =1;
+		       // std::cout << "g_isConv : " << g_isConv[g_size] << std::endl;  
+		     }
+		 }
+	     }
+	 }
+       */
+       /**********start conversion************/
+       g_size++;
+     }
+   //for(reco::PhotonCollection::const_iterator it=photonCollection->begin(); it!=photonCollection->end() ; ++it)
+   for(unsigned int i=0; i<photons->size() ; i++)
+     {
+       Ptr<pat::Photon> it = photons->ptrAt( i );
+       p_eta[p_size] = it->eta();
+       p_phi[p_size] = it->phi();
+       p_SCeta[p_size] = it->superCluster()->eta();
+       p_SCphi[p_size] = it->superCluster()->phi();
+       p_ecalenergy[p_size] = it->superCluster()->energy();
+       //std::cout << "p4 type " << it->getCandidateP4type() << std::endl;
+       p_photonenergy[p_size] = it->getCorrectedEnergy(it->getCandidateP4type());
+       p_r9[p_size] = it->r9();
+       p_energy_1x5[p_size] = it->e1x5();
+       p_energy_2x5[p_size] = it->e2x5();
+       p_energy_3x3[p_size] = it->e3x3();
+       p_energy_5x5[p_size] = it->e5x5();
+       p_esenergy[p_size] = it->superCluster()->preshowerEnergy();
+       p_rawenergy[p_size]= it->superCluster()->rawEnergy();
+       p_pt[p_size]= it->pt();
+       p_isGap[p_size] = it->isEBEEGap();
+       p_hOverE[p_size]= it->hadronicOverEm();
+       p_sigmaIetaIeta[p_size]= it->sigmaIetaIeta();
+       p_ecalRecHitSumEtConeDR03[p_size]= it->ecalRecHitSumEtConeDR03();
+       p_hcalTowerSumEtConeDR03[p_size]= it->hcalTowerSumEtConeDR03();
+       p_trkSumPtSolidConeDR03[p_size]= it->trkSumPtSolidConeDR03();
+       
+       
+       //std::cout << "supercluster size " << it->superCluster()->size() << std::endl;
+       p_size++;
+       if(p_size==MAX_PHOTON)
+	 std::cout << "too many photons " << std::endl;
+     }
+   vtx_size = recoVertices->size();
+   //std::cout << " vertex size: " << recoVertices->size() << std::endl;
+   /************ end match photons ***********************/
+     t_photon->Fill();
+}
+
+// ------------ method called once each job just before starting event loop  ------------
+void 
+Ntuplizer::beginJob(const edm::EventSetup& es, const edm::ParameterSet& ps)
+{
+  std::cout << "beginning job" << std::endl;
+  
+    
+  
+  
+  
+}
+
+// ------------ method called once each job just after ending the event loop  ------------
+void 
+Ntuplizer::endJob() 
+{
+}
+
+void
+Ntuplizer::fillDescriptions(edm::ConfigurationDescriptions& descriptions) 
+{
+  edm::ParameterSetDescription desc;
+  desc.setUnknown();
+  descriptions.addDefault(desc);
+}
+
+//define this as a plug-in
+DEFINE_FWK_MODULE(Ntuplizer);
